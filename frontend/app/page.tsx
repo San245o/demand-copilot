@@ -8,18 +8,31 @@ import {
   type BriefData,
   type ForecastData,
   type StreamEvent,
+  type ValidationData,
 } from "@/lib/types";
 
 export default function Home() {
   const [entityId, setEntityId] = useState("store_1");
   const [horizon, setHorizon] = useState(7);
-  const { events, running, error, start, stop } = useForecastStream();
+  const {
+    events,
+    running,
+    awaitingApproval,
+    error,
+    start,
+    resume,
+    stop,
+  } = useForecastStream();
 
   const forecast = useMemo(
     () => latestData<ForecastData>(events, "forecast"),
     [events],
   );
   const brief = useMemo(() => latestData<BriefData>(events, "brief"), [events]);
+  const validation = useMemo(() => {
+    const e = [...events].reverse().find((x) => x.agent === "validation" && x.type === "agent_end");
+    return e ? (e.data as unknown as ValidationData) : null;
+  }, [events]);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -29,7 +42,7 @@ export default function Home() {
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
           A crew of agents senses demand, calls a real forecast model, validates
-          it, and drafts an inventory brief — streamed live.
+          it, then waits for your approval before drafting the inventory brief.
         </p>
       </header>
 
@@ -88,6 +101,16 @@ export default function Home() {
         ))}
       </section>
 
+      {/* Human-in-the-loop approval gate */}
+      {awaitingApproval && (
+        <ApprovalGate
+          forecast={forecast}
+          validation={validation}
+          onApprove={() => resume("approve")}
+          onReject={(fb) => resume("reject", fb)}
+        />
+      )}
+
       {/* Results */}
       <section className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {forecast && <ForecastPanel forecast={forecast} />}
@@ -103,13 +126,69 @@ export default function Home() {
   );
 }
 
-function AgentColumn({
-  agent,
-  events,
+function ApprovalGate({
+  forecast,
+  validation,
+  onApprove,
+  onReject,
 }: {
-  agent: string;
-  events: StreamEvent[];
+  forecast: ForecastData | null;
+  validation: ValidationData | null;
+  onApprove: () => void;
+  onReject: (feedback: string) => void;
 }) {
+  const [feedback, setFeedback] = useState("");
+  const flagged = validation?.needs_review;
+  return (
+    <section
+      className={`mt-8 rounded-xl border-2 p-5 ${
+        flagged ? "border-amber-400 bg-amber-50" : "border-blue-300 bg-blue-50"
+      }`}
+    >
+      <h3 className="text-sm font-semibold">Human approval required</h3>
+      <p className="mt-1 text-sm text-neutral-700">
+        The crew produced a {forecast?.points.length ?? 0}-step forecast
+        {validation && (
+          <>
+            {" "}
+            with a CI width of{" "}
+            <strong>{validation.ci_width_pct}%</strong> of the mean.
+          </>
+        )}{" "}
+        {flagged ? (
+          <span className="font-medium text-amber-700">
+            Flagged for review (wide interval or high value).
+          </span>
+        ) : (
+          "Within tolerance."
+        )}
+      </p>
+      <textarea
+        value={feedback}
+        onChange={(e) => setFeedback(e.target.value)}
+        placeholder="Optional feedback if rejecting…"
+        className="mt-3 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        rows={2}
+      />
+      <div className="mt-3 flex gap-3">
+        <button
+          onClick={onApprove}
+          className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white"
+        >
+          Approve → draft brief
+        </button>
+        <button
+          onClick={() => onReject(feedback || "Rejected by reviewer")}
+          className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700"
+        >
+          Reject
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }) {
   const active = events.some((e) => e.type === "agent_start");
   const done = events.some((e) => e.type === "agent_end");
   return (
@@ -120,9 +199,7 @@ function AgentColumn({
       </div>
       <ul className="space-y-1.5">
         {events
-          .filter((e) =>
-            ["thought", "tool_call", "tool_result"].includes(e.type),
-          )
+          .filter((e) => ["thought", "tool_call", "tool_result"].includes(e.type))
           .map((e, i) => (
             <li key={i} className="text-xs leading-snug">
               <span
@@ -134,11 +211,7 @@ function AgentColumn({
                       : "text-green-700"
                 }
               >
-                {e.type === "tool_call"
-                  ? "→ "
-                  : e.type === "tool_result"
-                    ? "✓ "
-                    : "• "}
+                {e.type === "tool_call" ? "→ " : e.type === "tool_result" ? "✓ " : "• "}
                 {e.message}
               </span>
             </li>
@@ -199,6 +272,22 @@ function BriefPanel({ brief }: { brief: BriefData }) {
       <h3 className="mb-2 text-sm font-semibold">Forecast brief</h3>
       <p className="text-sm font-medium">{brief.headline}</p>
       <p className="mt-2 text-sm text-neutral-700">{brief.recommendation}</p>
+      {(brief.reorder_point || brief.horizon_total) && (
+        <div className="mt-3 flex gap-4 text-sm">
+          {brief.horizon_total != null && (
+            <div>
+              <span className="text-neutral-500">Horizon total: </span>
+              <strong>{brief.horizon_total.toLocaleString()}</strong>
+            </div>
+          )}
+          {brief.reorder_point != null && (
+            <div>
+              <span className="text-neutral-500">Reorder point: </span>
+              <strong>{brief.reorder_point.toLocaleString()}</strong>
+            </div>
+          )}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-1.5">
         <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">
           confidence: {brief.confidence}

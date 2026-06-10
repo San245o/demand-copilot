@@ -4,17 +4,22 @@ version = "0.1.0"
 description = "Agentic demand-forecasting co-pilot backend (FastAPI + LangGraph)"
 requires-python = ">=3.12"
 
-# P0 keeps deps lean: web + streaming + config only, so the first build is fast
-# and the streaming pipe is verifiable. Heavier deps are added per phase:
-#   P2: statsforecast, pandas, numpy        (real forecast tool)
-#   P3: langgraph, langchain-google-genai, chromadb  (real agents + RAG)
 dependencies = [
+    # web + streaming + config
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "sse-starlette>=2.1",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "httpx>=0.27",
+    # forecast tool (P2)
+    "statsforecast>=1.7",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    # agent crew + LLM (P3) — Gemini is optional at runtime; lib is always present
+    "langgraph>=0.2.50",
+    "langchain-core>=0.3",
+    "langchain-google-genai>=2.0",
 ]
 
 [dependency-groups]

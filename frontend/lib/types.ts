@@ -38,6 +38,15 @@ export interface BriefData {
   recommendation: string;
   confidence: string;
   drivers: string[];
+  reorder_point?: number;
+  horizon_total?: number;
+}
+
+export interface ValidationData {
+  ci_width_pct: number;
+  avg_mean: number;
+  needs_review: boolean;
+  passed: boolean;
 }
 
 export const AGENTS = ["sensing", "forecast", "validation", "planning"] as const;

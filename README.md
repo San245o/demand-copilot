@@ -22,7 +22,10 @@ dataset / API ─► Adapter ─► canonical TimeSeries ─► [ Sensing ─►
   **adapter**. Signals are optional and discovered, never hardcoded — so a bare time series and a
   rich promo/weather dataset run through the identical code path.
 - **Forecast is a tool, not the LLM.** `statsforecast` (AutoARIMA / AutoETS) → point forecast + 95% CI.
-- **Plain vector RAG** (Chroma) over past forecast reports / promo playbooks. No GraphRAG.
+- **Plain vector RAG** over past forecast reports / promo playbooks. No GraphRAG. The
+  store is a small self-contained numpy cosine index (Gemini embeddings when a key is
+  present, deterministic hash embeddings offline) — same add/query interface, swappable
+  for Chroma later, zero extra heavy deps.
 - **Human-in-the-loop** via LangGraph `interrupt()` + `Command(resume=…)`.
 
 ## Stack
@@ -32,7 +35,7 @@ dataset / API ─► Adapter ─► canonical TimeSeries ─► [ Sensing ─►
 | Backend | FastAPI + LangGraph (Python 3.12, managed by `uv`) |
 | LLM | Gemini (`gemini-3.5-flash` reasoning, `gemini-3.1-pro` narrative) via `langchain-google-genai` |
 | Forecast tool | `statsforecast` (AutoARIMA / AutoETS) |
-| RAG | Chroma (local) |
+| RAG | self-contained numpy vector store (Gemini / hash embeddings) |
 | Signals | Open-Meteo (weather), Nager.Date (holidays), Tavily (search), FRED (macro, optional) |
 | Frontend | Next.js (App Router) + Tailwind, SSE streaming |
 
