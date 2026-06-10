@@ -18,7 +18,8 @@ class EventType(str, Enum):
     AGENT_END = "agent_end"  # an agent/node finished
     FORECAST = "forecast"  # structured forecast payload
     INTERRUPT = "interrupt"  # paused for human approval
-    BRIEF = "brief"  # final narrative brief
+    ANSWER = "answer"  # a streamed token of the final answer
+    BRIEF = "brief"  # final narrative brief / full answer
     RUN_END = "run_end"
     ERROR = "error"
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
@@ -9,10 +8,10 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from app.adapters.registry import active_adapter_name, get_adapter
-from app.agents.runner import resume_crew_stream, run_crew_stream
+from app.agents.chat_agent import AVAILABLE_MODELS, chat_stream
 from app.core.config import settings
 
-app = FastAPI(title="Demand Forecasting Co-Pilot", version="1.0.0")
+app = FastAPI(title="Demand Forecasting Co-Pilot", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,10 +21,15 @@ app.add_middleware(
 )
 
 
-class Decision(BaseModel):
-    thread_id: str
-    action: str = "approve"  # approve | reject | edit
-    feedback: str | None = None
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = Field(default_factory=list)
+    model: str | None = None
 
 
 @app.get("/health")
@@ -41,34 +45,24 @@ def health() -> dict[str, object]:
     }
 
 
+@app.get("/models")
+def models() -> dict[str, object]:
+    return {"models": AVAILABLE_MODELS, "default": AVAILABLE_MODELS[0]}
+
+
 @app.get("/entities")
 def entities() -> dict[str, object]:
     adapter = get_adapter()
     return {"adapter": adapter.name, "entities": adapter.list_entities()}
 
 
-@app.get("/forecast/stream")
-async def forecast_stream(
-    entity_id: str = "store_1", horizon: int = 7
-) -> EventSourceResponse:
-    """Run the crew until the human-approval interrupt, streaming each step."""
-    horizon = max(1, min(horizon, 90))
-    thread_id = uuid.uuid4().hex
+@app.post("/chat/stream")
+async def chat(req: ChatRequest) -> EventSourceResponse:
+    """Stream a ReAct agent's reasoning, tool calls, and answer as SSE."""
+    history = [m.model_dump() for m in req.history]
 
     async def gen() -> AsyncIterator[dict[str, str]]:
-        async for event in run_crew_stream(entity_id, horizon, thread_id):
-            yield event.to_sse()
-
-    return EventSourceResponse(gen())
-
-
-@app.post("/forecast/resume")
-async def forecast_resume(decision: Decision) -> EventSourceResponse:
-    """Resume an interrupted run with the human decision, streaming to completion."""
-    payload = {"action": decision.action, "feedback": decision.feedback}
-
-    async def gen() -> AsyncIterator[dict[str, str]]:
-        async for event in resume_crew_stream(decision.thread_id, payload):
+        async for event in chat_stream(req.message, history, req.model):
             yield event.to_sse()
 
     return EventSourceResponse(gen())

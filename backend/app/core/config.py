@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # LLM
     google_api_key: str | None = None
     model_reasoning: str = "gemini-3.5-flash"
-    model_narrative: str = "gemini-3.1-pro"
+    model_narrative: str = "gemini-3.1-pro-preview"
 
     # Signal enrichers (all optional)
     tavily_api_key: str | None = None

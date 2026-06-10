@@ -1,43 +1,47 @@
 # Demand Forecasting Co-Pilot
 
-An agentic demand-forecasting assistant: a crew of LLM agents pulls demand signals,
-calls a real statistical forecasting model as a tool, validates the result against
-business rules, and produces an inventory recommendation + narrative brief — with a
-human-in-the-loop approval gate before anything is committed.
+A **chat co-pilot** for demand planning: you ask a question in natural language, and a
+single **ReAct agent** (Gemini) reasons step by step, decides which tools to call
+(forecast, web search, weather, holidays, playbooks), and answers — streaming its
+reasoning and tool use live, with a collapsible thought trail.
 
 > The LLM never does the arithmetic. Forecasting is a **tool** (`statsforecast`,
-> producing point forecasts + confidence intervals). The agents decide *what data to
+> producing point forecasts + confidence intervals). The agent decides *what data to
 > pull*, *when to forecast*, and *how to explain it*.
 
 ## Architecture
 
 ```
-dataset / API ─► Adapter ─► canonical TimeSeries ─► [ Sensing ─► Forecast ─► Validation ─► Planning ] ─► HITL approve ─► UI
-                            (date, entity_id,         LangGraph crew (nodes), streamed step-by-step over SSE
-                             target, signals{…})
+                                  ┌──────── tools the agent can call ────────┐
+                                  │ forecast_demand (statsforecast)          │
+ you ──chat──► ReAct agent ◄────► │ get_recent_sales / list_entities         │
+   (Next.js)   (Gemini, LangGraph │ search_web (Tavily)                      │
+               create_react_agent)│ get_weather / get_holidays / macro       │
+      ▲                           │ search_playbooks (vector RAG)            │
+      └──── SSE: thoughts, tool   └──────────────────────────────────────────┘
+            calls, streamed answer        each tool → canonical TimeSeries via an Adapter
 ```
 
-- **Dataset-agnostic core.** Agents only ever see a canonical `{date, entity_id, target, signals{…}}`
-  record. Each dataset (Rossmann, Favorita, M5, a real CSV/warehouse) plugs in behind a thin
-  **adapter**. Signals are optional and discovered, never hardcoded — so a bare time series and a
-  rich promo/weather dataset run through the identical code path.
-- **Forecast is a tool, not the LLM.** `statsforecast` (AutoARIMA / AutoETS) → point forecast + 95% CI.
-- **Plain vector RAG** over past forecast reports / promo playbooks. No GraphRAG. The
-  store is a small self-contained numpy cosine index (Gemini embeddings when a key is
-  present, deterministic hash embeddings offline) — same add/query interface, swappable
-  for Chroma later, zero extra heavy deps.
-- **Human-in-the-loop** via LangGraph `interrupt()` + `Command(resume=…)`.
+- **Chat + ReAct.** One agent, many tools. It calls tools in parallel and only when
+  needed (tuned to minimize requests on rate-limited free tiers).
+- **Dataset-agnostic core.** Tools see a canonical `{date, entity_id, target, signals{…}}`
+  record. Each dataset (Rossmann, Favorita, M5, a real CSV/warehouse) plugs in behind a
+  thin **adapter**. Signals are optional and discovered, never hardcoded.
+- **Forecast is a tool, not the LLM.** `statsforecast` AutoETS → point forecast + 95% CI.
+- **Plain vector RAG** over promo playbooks / post-mortems. No GraphRAG. Small
+  self-contained numpy cosine index (Gemini embeddings when a key is present, hash
+  embeddings offline) — same add/query interface, swappable for Chroma later.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
-| Backend | FastAPI + LangGraph (Python 3.12, managed by `uv`) |
-| LLM | Gemini (`gemini-3.5-flash` reasoning, `gemini-3.1-pro` narrative) via `langchain-google-genai` |
-| Forecast tool | `statsforecast` (AutoARIMA / AutoETS) |
+| Backend | FastAPI + LangGraph `create_react_agent` (Python 3.12, `uv`) |
+| LLM | Gemini via `langchain-google-genai`; model selectable in the UI (default `gemini-3.1-flash-lite`) |
+| Forecast tool | `statsforecast` (AutoETS) |
 | RAG | self-contained numpy vector store (Gemini / hash embeddings) |
 | Signals | Open-Meteo (weather), Nager.Date (holidays), Tavily (search), FRED (macro, optional) |
-| Frontend | Next.js (App Router) + Tailwind, SSE streaming |
+| Frontend | Next.js (App Router) + Tailwind — chat UI with streamed thought trail |
 
 **Every external dependency has a mock fallback**, so the app runs end-to-end even with no
 API keys and no dataset present.
