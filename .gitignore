@@ -1,0 +1,37 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- uv ---
+# keep uv.lock committed; ignore cache only
+
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+*.key
+kaggle.json
+
+# --- Data (raw + extracted; can be large) ---
+backend/data/raw/
+backend/data/extracted/
+backend/data/chroma/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# --- Editor / OS ---
+.DS_Store
+.vscode/
+.idea/
+*.log
