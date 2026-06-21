@@ -6,7 +6,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from statsforecast import StatsForecast
-from statsforecast.models import AutoETS, SeasonalNaive
+from statsforecast.models import AutoARIMA, AutoETS, AutoTheta, SeasonalNaive
 
 from app.core.schema import Forecast, ForecastPoint, TimeSeries
 
@@ -15,13 +15,19 @@ from app.core.schema import Forecast, ForecastPoint, TimeSeries
 
 
 def run_forecast(
-    series: TimeSeries, horizon: int, level: int = 95
+    series: TimeSeries,
+    horizon: int,
+    level: int = 95,
+    model: str = "auto",
+    season_length: int | None = None,
 ) -> Forecast:
     """Fit a statistical model and return a point forecast + interval.
 
-    Uses AutoETS (handles trend + weekly seasonality) with a SeasonalNaive fallback
-    for very short series. Daily data → season_length=7.
+    Supports auto/ets/arima/theta/naive, with a SeasonalNaive fallback for very
+    short series. Default seasonality: D→7, W→52, M→12.
     """
+    level = max(50, min(int(level), 99))
+    model_key = model.lower().strip()
     if len(series.points) < 14:
         return _seasonal_naive_fallback(series, horizon, level)
 
@@ -34,19 +40,22 @@ def run_forecast(
     )
     df["ds"] = pd.to_datetime(df["ds"])
 
-    season = 7 if series.freq == "D" else 1
+    season = season_length or _default_season_length(series.freq)
+    model_obj, model_col, model_label = _model(model_key, season)
     sf = StatsForecast(
-        models=[AutoETS(season_length=season)],
+        models=[model_obj],
         freq="D" if series.freq == "D" else series.freq,
         n_jobs=1,
     )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        sf.fit(df)
-        fc = sf.predict(h=horizon, level=[level])
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sf.fit(df)
+            fc = sf.predict(h=horizon, level=[level])
+    except Exception:
+        return _seasonal_naive_fallback(series, horizon, level)
 
-    model_col = "AutoETS"
     lo_col, hi_col = f"{model_col}-lo-{level}", f"{model_col}-hi-{level}"
 
     # Access columns by label (interval columns have hyphens, which itertuples mangles).
@@ -56,8 +65,8 @@ def run_forecast(
             ForecastPoint(
                 date=pd.Timestamp(fc["ds"].iloc[i]).date(),
                 mean=max(0.0, float(fc[model_col].iloc[i])),
-                lower=max(0.0, float(fc[lo_col].iloc[i])),
-                upper=max(0.0, float(fc[hi_col].iloc[i])),
+                lower=max(0.0, float(fc[lo_col].iloc[i])) if lo_col in fc else 0.0,
+                upper=max(0.0, float(fc[hi_col].iloc[i])) if hi_col in fc else max(0.0, float(fc[model_col].iloc[i])),
             )
         )
 
@@ -65,9 +74,23 @@ def run_forecast(
         entity_id=series.entity_id,
         horizon=horizon,
         level=level,
-        model="AutoETS",
+        model=model_label,
         points=points,
     )
+
+
+def _default_season_length(freq: str) -> int:
+    return {"D": 7, "W": 52, "M": 12}.get(freq, 1)
+
+
+def _model(model: str, season: int):
+    if model == "arima":
+        return AutoARIMA(season_length=season), "AutoARIMA", "AutoARIMA"
+    if model == "theta":
+        return AutoTheta(season_length=season), "AutoTheta", "AutoTheta"
+    if model == "naive":
+        return SeasonalNaive(season_length=season), "SeasonalNaive", "SeasonalNaive"
+    return AutoETS(season_length=season), "AutoETS", "AutoETS"
 
 
 def _seasonal_naive_fallback(
@@ -78,6 +101,9 @@ def _seasonal_naive_fallback(
     last_val = series.points[-1].target if series.points else 0.0
     vals = np.array([p.target for p in series.points]) if series.points else np.array([0.0])
     spread = float(np.std(vals)) * 1.96 if len(vals) > 1 else last_val * 0.3
+    # Cap the band so a tiny sample doesn't produce an interval that swallows the
+    # whole chart. It's a rough baseline; keep it readable rather than dramatic.
+    spread = min(spread, max(abs(last_val) * 0.35, 1.0))
 
     points: list[ForecastPoint] = []
     for h in range(1, horizon + 1):

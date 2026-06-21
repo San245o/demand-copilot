@@ -51,3 +51,31 @@ class Forecast(BaseModel):
     level: int = 95  # confidence level, percent
     model: str = "mock"
     points: list[ForecastPoint] = Field(default_factory=list)
+
+
+class DatasetRegion(BaseModel):
+    country_code: str
+    country_name: str
+    lat: float
+    lon: float
+
+
+class DatasetProfile(BaseModel):
+    id: str
+    name: str
+    source_file: str
+    relevant: bool
+    relevance_reason: str
+    description: str
+    date_column: str | None = None
+    target_column: str | None = None
+    target_name: str = "demand"
+    unit: str | None = None
+    entity_columns: list[str] = Field(default_factory=list)
+    signal_columns: list[str] = Field(default_factory=list)
+    freq: str = "D"
+    region: DatasetRegion | None = None
+    row_count: int = 0
+    date_min: Date | None = None
+    date_max: Date | None = None
+    suggested_questions: list[str] = Field(default_factory=list)

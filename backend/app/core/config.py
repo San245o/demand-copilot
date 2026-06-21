@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = None
     fred_api_key: str | None = None
 
+    # Optional sandbox for generated matplotlib visualizations
+    e2b_api_key: str | None = None
+
     # CORS for the Next.js dev server
     frontend_origin: str = "http://localhost:3000"
 
@@ -37,6 +40,10 @@ class Settings(BaseSettings):
     @property
     def has_fred(self) -> bool:
         return bool(self.fred_api_key)
+
+    @property
+    def has_e2b(self) -> bool:
+        return bool(self.e2b_api_key)
 
 
 settings = Settings()

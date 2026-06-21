@@ -19,7 +19,8 @@ venv/
 kaggle.json
 
 # --- Data (raw + extracted; can be large) ---
-backend/data/raw/
+backend/data/raw/*
+!backend/data/raw/*.csv
 backend/data/extracted/
 backend/data/chroma/
 

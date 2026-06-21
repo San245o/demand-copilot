@@ -17,6 +17,7 @@ class EventType(str, Enum):
     TOOL_RESULT = "tool_result"  # tool returned
     AGENT_END = "agent_end"  # an agent/node finished
     FORECAST = "forecast"  # structured forecast payload
+    VISUALIZATION = "visualization"  # generated chart/image payload
     INTERRUPT = "interrupt"  # paused for human approval
     ANSWER = "answer"  # a streamed token of the final answer
     BRIEF = "brief"  # final narrative brief / full answer

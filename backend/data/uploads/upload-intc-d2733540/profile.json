@@ -1,0 +1,35 @@
+{
+  "id": "upload-intc-d2733540",
+  "name": "INTC",
+  "source_file": "INTC.csv",
+  "relevant": true,
+  "relevance_reason": "The dataset contains daily historical stock market data for Intel (INTC), which is suitable for time-series forecasting of price or volume metrics.",
+  "description": "This dataset provides daily historical stock market performance for Intel (INTC), including opening, high, low, closing prices, and trading volume.",
+  "date_column": "Date",
+  "target_column": "close",
+  "target_name": "Closing Price",
+  "unit": "USD",
+  "entity_columns": [],
+  "signal_columns": [
+    "open",
+    "high",
+    "low",
+    "adjclose",
+    "volume"
+  ],
+  "freq": "D",
+  "region": {
+    "country_code": "US",
+    "country_name": "United States",
+    "lat": 37.0902,
+    "lon": -95.7129
+  },
+  "row_count": 2623,
+  "date_min": "2016-01-04",
+  "date_max": "2026-06-09",
+  "suggested_questions": [
+    "What is the forecasted closing price for Intel stock over the next 30 days?",
+    "How does the trading volume correlate with the daily closing price?",
+    "Are there any significant seasonal trends in Intel's stock price over the last 5 years?"
+  ]
+}
